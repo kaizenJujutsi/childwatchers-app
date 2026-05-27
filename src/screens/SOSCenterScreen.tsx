@@ -121,6 +121,7 @@ export const SOSCenterScreen: React.FC = () => {
       setCountdown(c);
       if (c <= 0) {
         clearInterval(intervalRef.current!);
+        intervalRef.current = null;
         setSosActive(false);
         animRef.current?.stop();
         animRef.current = null;
@@ -196,7 +197,7 @@ export const SOSCenterScreen: React.FC = () => {
             >
               <Ionicons name="warning" size={48} color={Colors.white} />
               <Text style={styles.sosBtnText}>
-                {sosActive ? `Sending in ${countdown}s…` : 'HOLD TO SEND RED-ALERT'}
+                {sosActive ? `Sending in ${countdown}s…` : 'TAP TO SEND RED-ALERT'}
               </Text>
             </TouchableOpacity>
           </Animated.View>
