@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useAuth } from '../contexts/AuthContext';
+import { fetchWatcherById } from '../services/watchers';
 import { Colors } from '../theme/colors';
 import { Spacing } from '../theme/spacing';
 import { Card } from '../components/ui/Card';
@@ -38,16 +41,34 @@ const MODULES = [
 ];
 
 export const WatcherVettingScreen: React.FC<Props> = ({ navigation }) => {
+  const { user } = useAuth();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const completed = STEPS.filter(s => s.status === 'complete').length;
-  const progress = (completed / STEPS.length) * 100;
+  const [allComplete, setAllComplete] = useState(false);
+
+  const loadVetting = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const profile = await fetchWatcherById(user.id);
+      if (profile?.vettingComplete) setAllComplete(true);
+    } catch {
+      // keep static state
+    }
+  }, [user?.id]);
+
+  useFocusEffect(useCallback(() => { void loadVetting(); }, [loadVetting]));
+
+  const steps = allComplete
+    ? STEPS.map(s => ({ ...s, status: 'complete' as const }))
+    : STEPS;
+  const completed = steps.filter(s => s.status === 'complete').length;
+  const progress = (completed / steps.length) * 100;
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Vetting Progress</Text>
-        <Text style={styles.headerSub}>{completed} of {STEPS.length} steps complete</Text>
+        <Text style={styles.headerSub}>{completed} of {steps.length} steps complete</Text>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -61,7 +82,7 @@ export const WatcherVettingScreen: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.progressFill, { width: `${progress}%` as any }]} />
           </View>
           <Text style={styles.progressNote}>
-            {completed < STEPS.length
+            {completed < steps.length
               ? 'Complete all 7 steps to become a verified ChildWatchers professional'
               : 'All steps complete — you are fully certified!'}
           </Text>
@@ -81,7 +102,7 @@ export const WatcherVettingScreen: React.FC<Props> = ({ navigation }) => {
 
         <Card variant="elevated" style={styles.stepsCard}>
           <Text style={styles.sectionTitle}>Vetting Steps</Text>
-          {STEPS.map((step, i) => (
+          {steps.map((step, i) => (
             <View key={step.id}>
               <TouchableOpacity onPress={() => setExpanded(expanded === step.id ? null : step.id)} activeOpacity={0.85}>
                 <VettingBadge step={step} index={i} />
@@ -127,7 +148,7 @@ export const WatcherVettingScreen: React.FC<Props> = ({ navigation }) => {
                   />
                 </View>
               )}
-              {i < STEPS.length - 1 && <View style={styles.divider} />}
+              {i < steps.length - 1 && <View style={styles.divider} />}
             </View>
           ))}
         </Card>
