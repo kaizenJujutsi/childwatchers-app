@@ -107,10 +107,10 @@ export const WagesWalletScreen: React.FC = () => {
 
   const escrowBalance = bookings
     .filter(b => b.status === 'confirmed' || b.status === 'active')
-    .reduce((sum, b) => sum + b.total_kes, 0);
+    .reduce((sum, b) => sum + b.subtotal, 0);
 
   const totalEarnedMtd = bookings
-    .filter(b => b.status === 'complete' && b.created_at.startsWith(currentMonthPrefix()))
+    .filter(b => b.status === 'complete' && b.date.startsWith(currentMonthPrefix()))
     .reduce((sum, b) => sum + b.subtotal, 0);
 
   const myRate = [...bookings]
@@ -182,14 +182,20 @@ export const WagesWalletScreen: React.FC = () => {
           <Text style={styles.balanceLabel}>Available Balance</Text>
           <Text style={styles.balanceAmount}>KES {walletBalance.toLocaleString()}</Text>
           <View style={styles.withdrawRow}>
-            <TouchableOpacity style={styles.withdrawStd} onPress={handleStandardWithdraw} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={[styles.withdrawStd, standardNet <= 0 && { opacity: 0.4 }]}
+              onPress={handleStandardWithdraw}
+              disabled={standardNet <= 0}
+              activeOpacity={0.85}
+            >
               <Ionicons name="calendar-outline" size={18} color={Colors.white} />
               <Text style={styles.withdrawTitle}>Tomorrow</Text>
               <Text style={styles.withdrawSub}>KES {standardNet.toLocaleString()} · Fee: KES {STANDARD_FEE}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.withdrawEmg, remaining <= 0 && { opacity: 0.5 }]}
+              style={[styles.withdrawEmg, (remaining <= 0 || emergencyNet <= 0) && { opacity: 0.4 }]}
               onPress={handleEmergencyWithdraw}
+              disabled={emergencyNet <= 0}
               activeOpacity={0.85}
             >
               <Ionicons name="flash-outline" size={18} color={Colors.white} />
