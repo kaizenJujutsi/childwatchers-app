@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ViewStyle } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ViewStyle, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { ParentTabParamList, RootStackParamList } from '../navigation/types';
 import { Colors } from '../theme/colors';
 import { Spacing } from '../theme/spacing';
@@ -12,8 +13,11 @@ import { Card } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { StatusChip } from '../components/ui/StatusChip';
 import { Button } from '../components/ui/Button';
-import { ZONE_ALERTS } from '../data/mockAlerts';
-import { WATCHERS } from '../data/mockWatchers';
+import { fetchZoneAlerts } from '../services/sos';
+import { fetchMyBookings } from '../services/bookings';
+import { fetchWatcherById } from '../services/watchers';
+import type { ApiZoneAlert, ApiBooking } from '../types/api';
+import type { Watcher } from '../data/mockWatchers';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocationZone } from '../services/location';
 
@@ -26,8 +30,6 @@ type Props = {
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const ACTIVE = WATCHERS[0];
-
 const ALERT_BORDER: Record<string, string> = {
   amber: Colors.accent, info: Colors.primary, resolved: Colors.safe,
 };
@@ -39,9 +41,30 @@ const QUICK: { icon: IoniconName; label: string; danger?: boolean; screen?: keyo
   { icon: 'chatbubble-outline',   label: 'Messages' },
 ];
 
+function formatAlertTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function shiftTimeRemaining(date: string, startTime: string, hours: number): string {
+  const [h, m] = startTime.split(':').map(Number);
+  const end = new Date(date + 'T00:00:00');
+  end.setHours(h + hours, m, 0, 0);
+  const diffMs = end.getTime() - Date.now();
+  if (diffMs <= 0) return 'Shift ending';
+  const diffH = Math.floor(diffMs / 3600000);
+  const diffM = Math.floor((diffMs % 3600000) / 60000);
+  return diffH > 0 ? `${diffH}h ${diffM}m remaining` : `${diffM}m remaining`;
+}
+
 export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
   const { deviceLocation, locationLoading } = useLocationZone();
+
+  const [alerts, setAlerts] = useState<ApiZoneAlert[]>([]);
+  const [activeBooking, setActiveBooking] = useState<ApiBooking | null>(null);
+  const [activeWatcher, setActiveWatcher] = useState<Watcher | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const firstName = user?.full_name?.split(' ')[0] ?? 'there';
   const homeZone = user?.zone ?? '';
@@ -52,9 +75,44 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
   const displayCity = deviceLocation?.city ?? homeCity;
   const usingGPS = !!deviceLocation;
 
-  const activeAlert = ZONE_ALERTS.find(a => {
+  const loadData = useCallback(async () => {
+    const [alertData, bookingData] = await Promise.all([
+      fetchZoneAlerts(),
+      fetchMyBookings(),
+    ]);
+    setAlerts(alertData);
+    const active = bookingData.find(b => b.status === 'active') ?? null;
+    setActiveBooking(active);
+    if (active) {
+      const watcher = await fetchWatcherById(active.watcher_id);
+      setActiveWatcher(watcher);
+    } else {
+      setActiveWatcher(null);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { void loadData(); }, [loadData]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const activeAlert = alerts.find(a => {
     if (a.type !== 'amber') return false;
     const az = a.zone.toLowerCase();
+    const gpsMatch = deviceLocation
+      ? az.includes(deviceLocation.zone.toLowerCase()) || deviceLocation.zone.toLowerCase().includes(az.split(' ')[0])
+      : false;
+    const homeMatch = homeZone
+      ? az.includes(homeZone.toLowerCase()) || homeZone.toLowerCase().includes(az.split(' ')[0])
+      : false;
+    return gpsMatch || homeMatch;
+  });
+
+  const zoneFeedAlerts = alerts.filter(alert => {
+    const az = alert.zone.toLowerCase();
     const gpsMatch = deviceLocation ? az.includes(deviceLocation.zone.toLowerCase()) || deviceLocation.zone.toLowerCase().includes(az.split(' ')[0]) : false;
     const homeMatch = homeZone ? az.includes(homeZone.toLowerCase()) || homeZone.toLowerCase().includes(az.split(' ')[0]) : false;
     return gpsMatch || homeMatch;
@@ -63,7 +121,12 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
 
         {/* Header */}
         <View style={styles.header}>
@@ -114,32 +177,45 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
         )}
 
         {/* Active booking */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Active Booking</Text>
-          <Card variant="elevated" style={styles.activeCard}>
-            <View style={styles.activeTop}>
-              <View style={styles.activeDot} />
-              <Text style={styles.activeStatus}>Shift in progress</Text>
-              <Text style={styles.activeTime}>3h 20m remaining</Text>
-            </View>
-            <View style={styles.activeBody}>
-              <View style={styles.activeInfo}>
-                <Text style={styles.activeName}>{ACTIVE.name}</Text>
-                <Text style={styles.activeMeta}>KES {ACTIVE.ratePerHour}/hr · Escrow protected</Text>
+        {activeBooking === null ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Active Booking</Text>
+            <Card variant="surface" style={{ padding: Spacing.cardPad }}>
+              <Text style={{ fontSize: 13, color: Colors.grey400, textAlign: 'center', paddingVertical: 8 }}>
+                No active shift right now.
+              </Text>
+            </Card>
+          </View>
+        ) : (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Active Booking</Text>
+            <Card variant="elevated" style={styles.activeCard}>
+              <View style={styles.activeTop}>
+                <View style={styles.activeDot} />
+                <Text style={styles.activeStatus}>Shift in progress</Text>
+                <Text style={styles.activeTime}>
+                  {shiftTimeRemaining(activeBooking.date, activeBooking.start_time, activeBooking.hours)}
+                </Text>
               </View>
-              <View style={styles.activeActions}>
-                <Button label="Locate" onPress={() => {}} variant="ghost" size="sm" icon="location-outline" />
-                <Button
-                  label="SOS"
-                  onPress={() => navigation.navigate('SOSCenter')}
-                  variant="danger"
-                  size="sm"
-                  icon="warning-outline"
-                />
+              <View style={styles.activeBody}>
+                <View style={styles.activeInfo}>
+                  <Text style={styles.activeName}>{activeWatcher?.name ?? 'Watcher'}</Text>
+                  <Text style={styles.activeMeta}>KES {activeBooking.rate_per_hour}/hr · Escrow protected</Text>
+                </View>
+                <View style={styles.activeActions}>
+                  <Button label="Locate" onPress={() => {}} variant="ghost" size="sm" icon="location-outline" />
+                  <Button
+                    label="SOS"
+                    onPress={() => navigation.navigate('SOSCenter')}
+                    variant="danger"
+                    size="sm"
+                    icon="warning-outline"
+                  />
+                </View>
               </View>
-            </View>
-          </Card>
-        </View>
+            </Card>
+          </View>
+        )}
 
         {/* Quick actions */}
         <View style={styles.section}>
@@ -167,12 +243,7 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.seeAll}>See all</Text>
             </TouchableOpacity>
           </View>
-          {ZONE_ALERTS.filter(alert => {
-            const az = alert.zone.toLowerCase();
-            const gpsMatch = deviceLocation ? az.includes(deviceLocation.zone.toLowerCase()) || deviceLocation.zone.toLowerCase().includes(az.split(' ')[0]) : false;
-            const homeMatch = homeZone ? az.includes(homeZone.toLowerCase()) || homeZone.toLowerCase().includes(az.split(' ')[0]) : false;
-            return gpsMatch || homeMatch;
-          }).slice(0, 3).map(alert => (
+          {zoneFeedAlerts.slice(0, 3).map(alert => (
             <Card
               key={alert.id}
               variant="surface"
@@ -180,17 +251,12 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
             >
               <View style={styles.feedMeta}>
                 <Text style={styles.feedZone}>{alert.zone}</Text>
-                <Text style={styles.feedTime}>{alert.time}</Text>
+                <Text style={styles.feedTime}>{formatAlertTime(alert.created_at)}</Text>
               </View>
               <Text style={styles.feedMsg} numberOfLines={2}>{alert.message}</Text>
             </Card>
           ))}
-          {ZONE_ALERTS.filter(alert => {
-            const az = alert.zone.toLowerCase();
-            const gpsMatch = deviceLocation ? az.includes(deviceLocation.zone.toLowerCase()) || deviceLocation.zone.toLowerCase().includes(az.split(' ')[0]) : false;
-            const homeMatch = homeZone ? az.includes(homeZone.toLowerCase()) || homeZone.toLowerCase().includes(az.split(' ')[0]) : false;
-            return gpsMatch || homeMatch;
-          }).length === 0 && (
+          {zoneFeedAlerts.length === 0 && (
             <Text style={styles.emptyFeed}>No alerts in your current area. All clear.</Text>
           )}
         </View>
