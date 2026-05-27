@@ -56,6 +56,7 @@ export const SOSCenterScreen: React.FC = () => {
   const [posting, setPosting] = useState(false);
   const sosScale = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const loadAlerts = useCallback(async () => {
     const data = await fetchZoneAlerts();
@@ -65,7 +66,14 @@ export const SOSCenterScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       void loadAlerts();
-    }, [loadAlerts])
+      return () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        animRef.current?.stop();
+        animRef.current = null;
+        sosScale.setValue(1);
+        setSosActive(false);
+      };
+    }, [loadAlerts, sosScale])
   );
 
   const onRefresh = async () => {
@@ -100,12 +108,13 @@ export const SOSCenterScreen: React.FC = () => {
     if (sosActive) return;
     setSosActive(true);
     setCountdown(5);
-    Animated.loop(
+    animRef.current = Animated.loop(
       Animated.sequence([
         Animated.timing(sosScale, { toValue: 1.08, duration: 400, useNativeDriver: true }),
         Animated.timing(sosScale, { toValue: 1, duration: 400, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    animRef.current.start();
     let c = 5;
     intervalRef.current = setInterval(() => {
       c -= 1;
@@ -113,7 +122,8 @@ export const SOSCenterScreen: React.FC = () => {
       if (c <= 0) {
         clearInterval(intervalRef.current!);
         setSosActive(false);
-        sosScale.stopAnimation();
+        animRef.current?.stop();
+        animRef.current = null;
         sosScale.setValue(1);
         void fireSOS();
       }
@@ -124,7 +134,8 @@ export const SOSCenterScreen: React.FC = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setSosActive(false);
     setCountdown(5);
-    sosScale.stopAnimation();
+    animRef.current?.stop();
+    animRef.current = null;
     sosScale.setValue(1);
   };
 
