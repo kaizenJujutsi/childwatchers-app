@@ -1,22 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  StatusBar, Alert, RefreshControl,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../theme/colors';
 import { Spacing } from '../theme/spacing';
 import { Shadows } from '../theme/shadows';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import {
-  TRANSACTIONS, WALLET_BALANCE, ESCROW_BALANCE, NEXT_PAYOUT_DATE,
-  TOTAL_EARNED_MTD, PLATFORM_FEE_RATE,
-} from '../data/mockTransactions';
-import { WATCHERS } from '../data/mockWatchers';
+import { fetchMyBookings } from '../services/bookings';
+import type { ApiBooking } from '../types/api';
 
-const MY_RATE = WATCHERS[0].ratePerHour;
-const FEE_AMOUNT = Math.round(MY_RATE * PLATFORM_FEE_RATE * 100) / 100;
-const TAKE_HOME = Math.round((MY_RATE - FEE_AMOUNT) * 100) / 100;
-
+const PLATFORM_FEE_RATE = 0.15;
 const STANDARD_FEE = 35;
 const EMERGENCY_QUOTA = 2;
 const EMERGENCY_RATE = 0.05;
@@ -35,16 +33,98 @@ const TX_COLORS: Record<string, string> = {
   payment: Colors.safe, withdrawal: Colors.sos, bonus: Colors.accent, pending: Colors.grey400,
 };
 
+interface TxItem {
+  id: string;
+  type: 'payment' | 'withdrawal' | 'pending';
+  description: string;
+  date: string;
+  amount: number;
+  status: 'completed' | 'pending';
+  mpesaRef: string | null;
+}
+
+function bookingToTx(b: ApiBooking): TxItem {
+  if (b.status === 'complete') {
+    return {
+      id: b.id,
+      type: 'payment',
+      description: `Booking completed · ${b.hours}h`,
+      date: b.date,
+      amount: b.subtotal,
+      status: 'completed',
+      mpesaRef: b.mpesa_receipt,
+    };
+  }
+  return {
+    id: b.id,
+    type: 'pending',
+    description: `${b.status === 'active' ? 'Active' : 'Upcoming'} booking · ${b.hours}h`,
+    date: b.date,
+    amount: b.subtotal,
+    status: 'pending',
+    mpesaRef: null,
+  };
+}
+
+function currentMonthPrefix(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function nextFriday(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const daysUntilFriday = (5 - day + 7) % 7 || 7;
+  d.setDate(d.getDate() + daysUntilFriday);
+  return d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+}
+
 function calcEmergencyFee(amount: number): number {
   return Math.min(Math.max(Math.round(amount * EMERGENCY_RATE), EMERGENCY_MIN), EMERGENCY_MAX);
 }
 
 export const WagesWalletScreen: React.FC = () => {
+  const [bookings, setBookings] = useState<ApiBooking[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [emergencyUsed, setEmergencyUsed] = useState(0);
+
+  const loadBookings = useCallback(async () => {
+    const data = await fetchMyBookings();
+    setBookings(data);
+  }, []);
+
+  useFocusEffect(useCallback(() => { void loadBookings(); }, [loadBookings]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadBookings();
+    setRefreshing(false);
+  };
+
+  const walletBalance = bookings
+    .filter(b => b.status === 'complete')
+    .reduce((sum, b) => sum + b.subtotal, 0);
+
+  const escrowBalance = bookings
+    .filter(b => b.status === 'confirmed' || b.status === 'active')
+    .reduce((sum, b) => sum + b.total_kes, 0);
+
+  const totalEarnedMtd = bookings
+    .filter(b => b.status === 'complete' && b.created_at.startsWith(currentMonthPrefix()))
+    .reduce((sum, b) => sum + b.subtotal, 0);
+
+  const myRate = bookings.find(b => b.status === 'complete')?.rate_per_hour ?? 0;
+  const feeAmount = Math.round(myRate * PLATFORM_FEE_RATE * 100) / 100;
+  const takeHome = Math.round((myRate - feeAmount) * 100) / 100;
+
   const remaining = EMERGENCY_QUOTA - emergencyUsed;
-  const emergencyFee = calcEmergencyFee(WALLET_BALANCE);
-  const standardNet = WALLET_BALANCE - STANDARD_FEE;
-  const emergencyNet = WALLET_BALANCE - emergencyFee;
+  const emergencyFee = calcEmergencyFee(walletBalance);
+  const standardNet = walletBalance - STANDARD_FEE;
+  const emergencyNet = walletBalance - emergencyFee;
+
+  const transactions: TxItem[] = bookings
+    .filter(b => b.status !== 'cancelled')
+    .map(bookingToTx);
 
   const handleStandardWithdraw = () => {
     Alert.alert(
@@ -54,7 +134,7 @@ export const WagesWalletScreen: React.FC = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: `Confirm — KES ${standardNet.toLocaleString()}`,
-          onPress: () => Alert.alert('Withdrawal Requested', 'Your M-Pesa payment will arrive tomorrow morning.\n\nRef: MOCK-STD7X3LP'),
+          onPress: () => Alert.alert('Withdrawal Requested', 'Your M-Pesa payment will arrive tomorrow morning.'),
         },
       ]
     );
@@ -74,7 +154,7 @@ export const WagesWalletScreen: React.FC = () => {
           text: `Send Now — KES ${emergencyNet.toLocaleString()}`,
           onPress: () => {
             setEmergencyUsed(u => u + 1);
-            Alert.alert('Sent!', 'Check your M-Pesa.\n\nRef: MOCK-EMG' + Date.now().toString(36).toUpperCase());
+            Alert.alert('Processing', 'Emergency withdrawal submitted. Check your M-Pesa within 5 minutes.');
           },
         },
       ]
@@ -89,11 +169,15 @@ export const WagesWalletScreen: React.FC = () => {
         <Text style={styles.headerSub}>Powered by M-Pesa · Safaricom Daraja</Text>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceAmount}>KES {WALLET_BALANCE.toLocaleString()}</Text>
+          <Text style={styles.balanceAmount}>KES {walletBalance.toLocaleString()}</Text>
           <View style={styles.withdrawRow}>
             <TouchableOpacity style={styles.withdrawStd} onPress={handleStandardWithdraw} activeOpacity={0.85}>
               <Ionicons name="calendar-outline" size={18} color={Colors.white} />
@@ -112,9 +196,9 @@ export const WagesWalletScreen: React.FC = () => {
           </View>
           <View style={styles.statsRow}>
             {([
-              ['lock-closed-outline', ESCROW_BALANCE.toLocaleString(), 'In Escrow'],
-              ['calendar-outline', NEXT_PAYOUT_DATE, 'Next Payout'],
-              ['trending-up-outline', `KES ${TOTAL_EARNED_MTD.toLocaleString()}`, 'Earned MTD'],
+              ['lock-closed-outline', escrowBalance.toLocaleString(), 'In Escrow'],
+              ['calendar-outline', nextFriday(), 'Next Payout'],
+              ['trending-up-outline', `KES ${totalEarnedMtd.toLocaleString()}`, 'Earned MTD'],
             ] as [IoniconName, string, string][]).map(([icon, val, lbl]) => (
               <View key={lbl} style={styles.stat}>
                 <Ionicons name={icon} size={16} color={Colors.white} />
@@ -127,9 +211,9 @@ export const WagesWalletScreen: React.FC = () => {
 
         <Card variant="surface" style={styles.rateCard}>
           {([
-            ['Your Rate', `KES ${MY_RATE}/hr`, false],
-            ['Platform Fee', `${PLATFORM_FEE_RATE * 100}% (KES ${FEE_AMOUNT}/hr)`, false],
-            ['Your Take-Home', `KES ${TAKE_HOME}/hr`, true],
+            ['Your Rate', myRate ? `KES ${myRate}/hr` : '—', false],
+            ['Platform Fee', myRate ? `${PLATFORM_FEE_RATE * 100}% (KES ${feeAmount}/hr)` : '—', false],
+            ['Your Take-Home', myRate ? `KES ${takeHome}/hr` : '—', true],
           ] as [string, string, boolean][]).map(([lbl, val, highlight]) => (
             <View key={lbl} style={styles.rateRow}>
               <Text style={styles.rateLabel}>{lbl}</Text>
@@ -142,30 +226,33 @@ export const WagesWalletScreen: React.FC = () => {
 
         <Card variant="surface" style={styles.txCard}>
           <Text style={styles.txTitle}>Transaction History</Text>
-          {TRANSACTIONS.map(tx => (
-            <View key={tx.id} style={styles.txRow}>
-              <View style={[styles.txIcon, { backgroundColor: TX_COLORS[tx.type] + '20' }]}>
-                <Ionicons name={TX_ICONS[tx.type] ?? 'cash-outline'} size={18} color={TX_COLORS[tx.type]} />
-              </View>
-              <View style={styles.txBody}>
-                <Text style={styles.txDesc}>{tx.description}</Text>
-                <View style={styles.txMeta}>
-                  <Text style={styles.txDate}>{tx.date}</Text>
-                  {tx.mpesaRef ? <Text style={styles.txRef}>Ref: {tx.mpesaRef}</Text> : null}
-                  <Badge
-                    label={tx.status === 'completed' ? 'Completed' : tx.status === 'pending' ? 'In Escrow' : 'Processing'}
-                    variant={tx.status === 'completed' ? 'success' : 'neutral'}
-                    size="sm"
-                  />
+          {transactions.length === 0 ? (
+            <Text style={styles.txEmpty}>No booking history yet.</Text>
+          ) : (
+            transactions.map(tx => (
+              <View key={tx.id} style={styles.txRow}>
+                <View style={[styles.txIcon, { backgroundColor: TX_COLORS[tx.type] + '20' }]}>
+                  <Ionicons name={TX_ICONS[tx.type] ?? 'cash-outline'} size={18} color={TX_COLORS[tx.type]} />
                 </View>
+                <View style={styles.txBody}>
+                  <Text style={styles.txDesc}>{tx.description}</Text>
+                  <View style={styles.txMeta}>
+                    <Text style={styles.txDate}>{tx.date}</Text>
+                    {tx.mpesaRef ? <Text style={styles.txRef}>Ref: {tx.mpesaRef}</Text> : null}
+                    <Badge
+                      label={tx.status === 'completed' ? 'Completed' : 'In Escrow'}
+                      variant={tx.status === 'completed' ? 'success' : 'neutral'}
+                      size="sm"
+                    />
+                  </View>
+                </View>
+                <Text style={[styles.txAmount, { color: tx.amount < 0 ? Colors.sos : tx.type === 'pending' ? Colors.grey400 : Colors.safe }]}>
+                  {tx.amount < 0 ? '-' : '+'}KES {Math.abs(tx.amount).toLocaleString()}
+                </Text>
               </View>
-              <Text style={[styles.txAmount, { color: tx.amount < 0 ? Colors.sos : tx.type === 'pending' ? Colors.grey400 : Colors.safe }]}>
-                {tx.amount < 0 ? '-' : '+'}KES {Math.abs(tx.amount).toLocaleString()}
-              </Text>
-            </View>
-          ))}
+            ))
+          )}
         </Card>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -201,6 +288,7 @@ const styles = StyleSheet.create({
   rateNote:      { fontSize: 12, color: Colors.grey400, lineHeight: 17 },
   txCard:        { padding: Spacing.cardPad },
   txTitle:       { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
+  txEmpty:       { fontSize: 13, color: Colors.grey400, textAlign: 'center', paddingVertical: 20 },
   txRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.grey50,

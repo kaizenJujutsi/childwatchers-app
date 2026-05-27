@@ -51,6 +51,23 @@ export interface BookingResponse {
   escrow_ref: string;
 }
 
+export interface ApiBooking {
+  id: string;
+  parent_id: string;
+  watcher_id: string;
+  date: string;
+  start_time: string;
+  hours: number;
+  rate_per_hour: number;
+  subtotal: number;
+  platform_fee: number;
+  total_kes: number;
+  status: 'pending' | 'confirmed' | 'active' | 'complete' | 'cancelled';
+  escrow_ref: string | null;
+  mpesa_receipt: string | null;
+  created_at: string;
+}
+
 export interface ChildProfile {
   child_name: string;
   child_dob: string;
