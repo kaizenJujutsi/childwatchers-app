@@ -11,9 +11,8 @@ import { Spacing } from '../theme/spacing';
 import { Shadows } from '../theme/shadows';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../contexts/AuthContext';
-import { triggerSOS, fetchZoneAlerts, postZoneAlert, fetchZoneAlertsWithLoading } from '../services/sos';
+import { triggerSOS, fetchZoneAlerts, postZoneAlert } from '../services/sos';
 import type { ApiZoneAlert } from '../types/api';
 
 type AlertTypeKey = 'red' | 'amber' | 'info' | 'resolved';
@@ -59,19 +58,17 @@ export const SOSCenterScreen: React.FC = () => {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
-
   const loadAlerts = useCallback(async () => {
-    setIsLoading(true);
-    const [data, error] = await fetchZoneAlertsWithLoading();
-    if (error) {
-      console.error('Failed to fetch alerts:', error.message);
-      setAlerts([]); // keep old data on error
-    } else {
-      setAlerts(data ?? []);
-    }
-    setIsLoading(false);
+    const data = await fetchZoneAlerts();
+    setAlerts(data);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAlerts();
+      return () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        animRef.current?.stop();
         animRef.current = null;
         sosScale.setValue(1);
         setSosActive(false);
