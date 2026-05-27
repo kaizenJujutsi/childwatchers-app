@@ -12,10 +12,11 @@ import { Shadows } from '../theme/shadows';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { fetchMyBookings } from '../services/bookings';
-import type { ApiBooking } from '../types/api';
+import { fetchWithdrawals, requestWithdrawal } from '../services/withdrawals';
+import type { ApiBooking, ApiWithdrawal } from '../types/api';
 
 const PLATFORM_FEE_RATE = 0.15;
-const STANDARD_FEE = 35;
+const STANDARD_FEE = 50;
 const EMERGENCY_QUOTA = 2;
 const EMERGENCY_RATE = 0.05;
 const EMERGENCY_MAX = 150;
@@ -66,6 +67,27 @@ function bookingToTx(b: ApiBooking): TxItem {
   };
 }
 
+function withdrawalToTx(w: ApiWithdrawal): TxItem {
+  return {
+    id: `wd-${w.id}`,
+    type: 'withdrawal',
+    description: `${w.type === 'emergency' ? 'Emergency' : 'Standard'} withdrawal`,
+    date: w.created_at.slice(0, 10),
+    amount: -w.amount_kes,
+    status: w.status === 'completed' ? 'completed' : 'pending',
+    mpesaRef: w.mpesa_receipt,
+  };
+}
+
+function currentWeekMondayMs(): number {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+  return monday.getTime();
+}
+
 function currentMonthPrefix(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -85,25 +107,41 @@ function calcEmergencyFee(amount: number): number {
 
 export const WagesWalletScreen: React.FC = () => {
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
+  const [withdrawals, setWithdrawals] = useState<ApiWithdrawal[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [emergencyUsed, setEmergencyUsed] = useState(0);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  const loadBookings = useCallback(async () => {
-    const data = await fetchMyBookings();
-    setBookings(data);
+  const loadData = useCallback(async () => {
+    try {
+      const [bookingData, withdrawalData] = await Promise.all([
+        fetchMyBookings(),
+        fetchWithdrawals(),
+      ]);
+      setBookings(bookingData);
+      setWithdrawals(withdrawalData);
+    } catch {}
   }, []);
 
-  useFocusEffect(useCallback(() => { void loadBookings(); }, [loadBookings]));
+  useFocusEffect(useCallback(() => { void loadData(); }, [loadData]));
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadBookings();
-    setRefreshing(false);
-  };
+    try {
+      await loadData();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadData]);
 
-  const walletBalance = bookings
+  const grossBalance = bookings
     .filter(b => b.status === 'complete')
     .reduce((sum, b) => sum + b.subtotal, 0);
+
+  const alreadyWithdrawn = withdrawals
+    .filter(w => w.status !== 'failed')
+    .reduce((sum, w) => sum + w.amount_kes, 0);
+
+  const walletBalance = grossBalance - alreadyWithdrawn;
 
   const escrowBalance = bookings
     .filter(b => b.status === 'confirmed' || b.status === 'active')
@@ -120,14 +158,19 @@ export const WagesWalletScreen: React.FC = () => {
   const feeAmount = Math.round(myRate * PLATFORM_FEE_RATE * 100) / 100;
   const takeHome = Math.round((myRate - feeAmount) * 100) / 100;
 
+  const monday = currentWeekMondayMs();
+  const emergencyUsed = withdrawals.filter(
+    w => w.type === 'emergency' && w.status !== 'failed' && new Date(w.created_at).getTime() >= monday
+  ).length;
   const remaining = EMERGENCY_QUOTA - emergencyUsed;
   const emergencyFee = calcEmergencyFee(walletBalance);
   const standardNet = walletBalance - STANDARD_FEE;
   const emergencyNet = walletBalance - emergencyFee;
 
-  const transactions: TxItem[] = bookings
-    .filter(b => b.status !== 'cancelled')
-    .map(bookingToTx);
+  const transactions: TxItem[] = [
+    ...bookings.filter(b => b.status !== 'cancelled').map(bookingToTx),
+    ...withdrawals.map(withdrawalToTx),
+  ].sort((a, b) => b.date.localeCompare(a.date));
 
   const handleStandardWithdraw = () => {
     Alert.alert(
@@ -137,7 +180,20 @@ export const WagesWalletScreen: React.FC = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: `Confirm — KES ${standardNet.toLocaleString()}`,
-          onPress: () => Alert.alert('Withdrawal Requested', 'Your M-Pesa payment will arrive tomorrow morning.'),
+          onPress: async () => {
+            if (isWithdrawing) return;
+            setIsWithdrawing(true);
+            try {
+              await requestWithdrawal('standard');
+              await loadData();
+              Alert.alert('Withdrawal Requested', 'Your M-Pesa payment will arrive tomorrow morning.');
+            } catch (e: unknown) {
+              const msg = e && typeof e === 'object' && 'message' in e ? String((e as {message: unknown}).message) : 'Please try again.';
+              Alert.alert('Withdrawal Failed', msg);
+            } finally {
+              setIsWithdrawing(false);
+            }
+          },
         },
       ]
     );
@@ -155,9 +211,19 @@ export const WagesWalletScreen: React.FC = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: `Send Now — KES ${emergencyNet.toLocaleString()}`,
-          onPress: () => {
-            setEmergencyUsed(u => u + 1);
-            Alert.alert('Processing', 'Emergency withdrawal submitted. Check your M-Pesa within 5 minutes.');
+          onPress: async () => {
+            if (isWithdrawing) return;
+            setIsWithdrawing(true);
+            try {
+              await requestWithdrawal('emergency');
+              await loadData();
+              Alert.alert('Processing', 'Emergency withdrawal submitted. Check your M-Pesa within 5 minutes.');
+            } catch (e: unknown) {
+              const msg = e && typeof e === 'object' && 'message' in e ? String((e as {message: unknown}).message) : 'Please try again.';
+              Alert.alert('Withdrawal Failed', msg);
+            } finally {
+              setIsWithdrawing(false);
+            }
           },
         },
       ]

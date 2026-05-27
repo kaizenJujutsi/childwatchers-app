@@ -105,3 +105,18 @@ export interface ApiZoneAlert {
   status: AlertStatus;
   created_at: string;
 }
+
+export type WithdrawalType = 'standard' | 'emergency';
+export type WithdrawalStatus = 'processing' | 'completed' | 'failed';
+
+export interface ApiWithdrawal {
+  id: string;
+  watcher_id: string;
+  type: WithdrawalType;
+  amount_kes: number;
+  fee: number;
+  status: WithdrawalStatus;
+  conversation_id: string | null;
+  mpesa_receipt: string | null;
+  created_at: string;
+}
