@@ -262,7 +262,6 @@ const styles = StyleSheet.create({
   shiftLeft:   { gap: 3 },
   shiftDate:   { fontSize: 14, fontWeight: '700', color: Colors.black },
   shiftTime:   { fontSize: 13, color: Colors.grey600 },
-  shiftParent: { fontSize: 12, color: Colors.grey400 },
   shiftRight:  { alignItems: 'flex-end', gap: 6 },
   shiftKes:    { fontSize: 16, fontWeight: '800', color: Colors.primary },
   grid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
