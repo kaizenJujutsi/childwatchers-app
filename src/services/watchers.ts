@@ -1,5 +1,5 @@
 import { apiGet } from './api';
-import { Watcher, BASE_VETTING, WATCHERS } from '../data/mockWatchers';
+import { Watcher, BASE_VETTING } from '../data/mockWatchers';
 
 interface WatcherApiItem {
   id: string;
@@ -45,6 +45,6 @@ export const fetchWatchers = async (): Promise<Watcher[]> => {
     const items = await apiGet<WatcherApiItem[]>('/watchers');
     return items.map(toWatcher);
   } catch {
-    return WATCHERS;
+    return [];
   }
 };

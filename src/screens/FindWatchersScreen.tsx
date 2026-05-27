@@ -1,11 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { CompositeNavigationProp } from '@react-navigation/native';
+import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ParentTabParamList, RootStackParamList } from '../navigation/types';
@@ -36,9 +36,12 @@ export const FindWatchersScreen: React.FC<Props> = ({ navigation }) => {
   const [specialty, setSpecialty] = useState('All');
   const [sortBy, setSortBy] = useState<'rating' | 'price_asc' | 'price_desc'>('rating');
 
-  useEffect(() => {
-    fetchWatchers().then(setWatchers).finally(() => setLoading(false));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchWatchers().then(setWatchers).finally(() => setLoading(false));
+    }, [])
+  );
 
   React.useEffect(() => {
     if (locationMode === 'nearby') {
@@ -48,7 +51,7 @@ export const FindWatchersScreen: React.FC<Props> = ({ navigation }) => {
     } else {
       setZone('All Zones');
     }
-  }, [locationMode, deviceLocation, user?.zone]);
+  }, [locationMode, deviceLocation?.zone, user?.zone]);
 
   const filtered = useMemo(() => {
     let list = watchers.filter(w => {
