@@ -31,7 +31,7 @@ type Props = {
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const ALERT_BORDER: Record<string, string> = {
-  amber: Colors.accent, info: Colors.primary, resolved: Colors.safe,
+  red: Colors.sos, amber: Colors.accent, info: Colors.primary, resolved: Colors.safe,
 };
 
 const QUICK: { icon: IoniconName; label: string; danger?: boolean; screen?: keyof ParentTabParamList }[] = [
@@ -43,12 +43,15 @@ const QUICK: { icon: IoniconName; label: string; danger?: boolean; screen?: keyo
 
 function formatAlertTime(iso: string): string {
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
 }
 
 function shiftTimeRemaining(date: string, startTime: string, hours: number): string {
-  const [h, m] = startTime.split(':').map(Number);
+  const parts = startTime.split(':').map(Number);
+  const [h, m] = parts;
   const end = new Date(date + 'T00:00:00');
+  if (isNaN(end.getTime()) || isNaN(h) || isNaN(m)) return 'Shift ending';
   end.setHours(h + hours, m, 0, 0);
   const diffMs = end.getTime() - Date.now();
   if (diffMs <= 0) return 'Shift ending';
@@ -59,7 +62,7 @@ function shiftTimeRemaining(date: string, startTime: string, hours: number): str
 
 export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
   const { user } = useAuth();
-  const { deviceLocation, locationLoading } = useLocationZone();
+  const { deviceLocation } = useLocationZone();
 
   const [alerts, setAlerts] = useState<ApiZoneAlert[]>([]);
   const [activeBooking, setActiveBooking] = useState<ApiBooking | null>(null);
@@ -76,28 +79,35 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
   const usingGPS = !!deviceLocation;
 
   const loadData = useCallback(async () => {
-    const [alertData, bookingData] = await Promise.all([
-      fetchZoneAlerts(),
-      fetchMyBookings(),
-    ]);
-    setAlerts(alertData);
-    const active = bookingData.find(b => b.status === 'active') ?? null;
-    setActiveBooking(active);
-    if (active) {
-      const watcher = await fetchWatcherById(active.watcher_id);
-      setActiveWatcher(watcher);
-    } else {
-      setActiveWatcher(null);
+    try {
+      const [alertData, bookingData] = await Promise.all([
+        fetchZoneAlerts(),
+        fetchMyBookings(),
+      ]);
+      setAlerts(alertData);
+      const active = bookingData.find(b => b.status === 'active') ?? null;
+      setActiveBooking(active);
+      if (active) {
+        const watcher = await fetchWatcherById(active.watcher_id);
+        setActiveWatcher(watcher);
+      } else {
+        setActiveWatcher(null);
+      }
+    } catch {
+      // keep existing state on error
     }
   }, []);
 
   useFocusEffect(useCallback(() => { void loadData(); }, [loadData]));
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+    try {
+      await loadData();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadData]);
 
   const activeAlert = alerts.find(a => {
     if (a.type !== 'amber') return false;
