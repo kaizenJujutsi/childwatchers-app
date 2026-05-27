@@ -113,7 +113,10 @@ export const WagesWalletScreen: React.FC = () => {
     .filter(b => b.status === 'complete' && b.created_at.startsWith(currentMonthPrefix()))
     .reduce((sum, b) => sum + b.subtotal, 0);
 
-  const myRate = bookings.find(b => b.status === 'complete')?.rate_per_hour ?? 0;
+  const myRate = [...bookings]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .find(b => b.status === 'complete')
+    ?.rate_per_hour ?? 0;
   const feeAmount = Math.round(myRate * PLATFORM_FEE_RATE * 100) / 100;
   const takeHome = Math.round((myRate - feeAmount) * 100) / 100;
 
