@@ -1,8 +1,13 @@
 {
   "expo": {
-    "name": "app",
-    "slug": "app",
+    "name": "ChildWatchers",
+    "slug": "childwatchers",
     "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "0eafb31f-f3a8-4b8e-8ad6-a6898805564c"
+      }
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,21 +15,26 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#134E4A"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.childwatchers.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#134E4A"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
