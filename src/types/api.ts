@@ -121,3 +121,11 @@ export interface ApiWithdrawal {
   mpesa_receipt: string | null;
   created_at: string;
 }
+
+export interface ApiReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  parent_name: string;
+  created_at: string;
+}

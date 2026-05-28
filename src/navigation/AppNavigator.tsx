@@ -21,6 +21,7 @@ import { WatcherVettingScreen } from '../screens/WatcherVettingScreen';
 import { WagesWalletScreen } from '../screens/WagesWalletScreen';
 import { ParentVerificationScreen } from '../screens/ParentVerificationScreen';
 import { TrainingVideoScreen } from '../screens/TrainingVideoScreen';
+import { RateWatcherScreen } from '../screens/RateWatcherScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 const ParentTab = createBottomTabNavigator<ParentTabParamList>();
@@ -96,6 +97,7 @@ export function AppNavigator() {
         <Stack.Screen name="AwaitingPayment" component={AwaitingPaymentScreen} />
         <Stack.Screen name="ParentVerification" component={ParentVerificationScreen} />
         <Stack.Screen name="TrainingVideo" component={TrainingVideoScreen} />
+        <Stack.Screen name="RateWatcher" component={RateWatcherScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

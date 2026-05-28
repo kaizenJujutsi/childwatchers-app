@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -14,6 +14,8 @@ import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { fetchWatcherReviews } from '../services/reviews';
+import type { ApiReview } from '../types/api';
 
 type Props = {
   navigation: StackNavigationProp<RootStackParamList, 'WatcherProfile'>;
@@ -31,6 +33,16 @@ const INFO_ICONS: Record<string, IoniconName> = {
 export const WatcherProfileScreen: React.FC<Props> = ({ navigation, route }) => {
   const { watcher } = route.params;
   const [tab, setTab] = useState<'about' | 'vetting' | 'reviews'>('about');
+  const [apiReviews, setApiReviews] = useState<ApiReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'reviews') return;
+    setReviewsLoading(true);
+    fetchWatcherReviews(watcher.id)
+      .then(setApiReviews)
+      .finally(() => setReviewsLoading(false));
+  }, [tab, watcher.id]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -64,7 +76,7 @@ export const WatcherProfileScreen: React.FC<Props> = ({ navigation, route }) => 
             onPress={() => setTab(t)}
           >
             <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-              {t === 'about' ? 'About' : t === 'vetting' ? 'Vetting' : `Reviews (${watcher.reviewCount})`}
+              {t === 'about' ? 'About' : t === 'vetting' ? 'Vetting' : `Reviews (${apiReviews.length})`}
             </Text>
           </TouchableOpacity>
         ))}
@@ -121,14 +133,20 @@ export const WatcherProfileScreen: React.FC<Props> = ({ navigation, route }) => 
 
         {tab === 'reviews' && (
           <View style={styles.section}>
-            {watcher.reviews.map((r, i) => (
-              <Card key={i} variant="surface" style={styles.reviewCard}>
+            {reviewsLoading && (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 20 }} />
+            )}
+            {!reviewsLoading && apiReviews.length === 0 && (
+              <Text style={styles.emptyReviews}>No reviews yet.</Text>
+            )}
+            {apiReviews.map(r => (
+              <Card key={r.id} variant="surface" style={styles.reviewCard}>
                 <View style={styles.reviewTop}>
-                  <Text style={styles.reviewParent}>{r.parent}</Text>
+                  <Text style={styles.reviewParent}>{r.parent_name}</Text>
                   <StarRating rating={r.rating} size="sm" />
-                  <Text style={styles.reviewDate}>{r.date}</Text>
+                  <Text style={styles.reviewDate}>{new Date(r.created_at).toLocaleDateString('en-KE', { month: 'short', year: 'numeric' })}</Text>
                 </View>
-                <Text style={styles.reviewText}>{r.text}</Text>
+                {r.comment ? <Text style={styles.reviewText}>{r.comment}</Text> : null}
               </Card>
             ))}
           </View>
@@ -198,6 +216,7 @@ const styles = StyleSheet.create({
   reviewParent: { fontWeight: '700', color: Colors.black, fontSize: 14, flex: 1 },
   reviewDate:   { fontSize: 11, color: Colors.grey400 },
   reviewText:   { fontSize: 14, color: Colors.grey600, lineHeight: 20 },
+  emptyReviews: { fontSize: 14, color: Colors.grey400, textAlign: 'center', paddingVertical: 20 },
   ctaBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.grey100,

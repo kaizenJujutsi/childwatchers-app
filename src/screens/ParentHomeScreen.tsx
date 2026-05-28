@@ -67,6 +67,7 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
   const [alerts, setAlerts] = useState<ApiZoneAlert[]>([]);
   const [activeBooking, setActiveBooking] = useState<ApiBooking | null>(null);
   const [activeWatcher, setActiveWatcher] = useState<Watcher | null>(null);
+  const [completedBookings, setCompletedBookings] = useState<ApiBooking[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const firstName = user?.full_name?.split(' ')[0] ?? 'there';
@@ -87,6 +88,7 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
       setAlerts(alertData);
       const active = bookingData.find(b => b.status === 'active') ?? null;
       setActiveBooking(active);
+      setCompletedBookings(bookingData.filter(b => b.status === 'complete'));
       if (active) {
         const watcher = await fetchWatcherById(active.watcher_id);
         setActiveWatcher(watcher);
@@ -245,6 +247,34 @@ export const ParentHomeScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Completed bookings */}
+        {completedBookings.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Past Bookings</Text>
+            {completedBookings.slice(0, 3).map(booking => (
+              <Card key={booking.id} variant="surface" style={styles.completedCard}>
+                <View style={styles.completedRow}>
+                  <View style={styles.completedInfo}>
+                    <Text style={styles.completedDate}>{booking.date}</Text>
+                    <Text style={styles.completedMeta}>KES {booking.total_kes} · {booking.hours}h</Text>
+                  </View>
+                  <Button
+                    label="Rate"
+                    onPress={() => navigation.navigate('RateWatcher', {
+                      bookingId: booking.id,
+                      watcherName: 'your watcher',
+                      watcherId: booking.watcher_id,
+                    })}
+                    variant="ghost"
+                    size="sm"
+                    icon="star-outline"
+                  />
+                </View>
+              </Card>
+            ))}
+          </View>
+        )}
+
         {/* Zone feed */}
         <View style={styles.section}>
           <View style={styles.sectionRow}>
@@ -334,4 +364,9 @@ const styles = StyleSheet.create({
   verifyTitle: { fontSize: 14, fontWeight: '700', color: Colors.accent },
   verifyBody:  { fontSize: 12, color: Colors.accent + 'CC', marginTop: 2 },
   emptyFeed:   { fontSize: 13, color: Colors.grey400, textAlign: 'center', paddingVertical: Spacing.md, fontStyle: 'italic' },
+  completedCard: { padding: Spacing.cardPad, marginBottom: 8 },
+  completedRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  completedInfo: { gap: 2 },
+  completedDate: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  completedMeta: { fontSize: 12, color: Colors.grey600 },
 });

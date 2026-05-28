@@ -16,6 +16,11 @@ export type RootStackParamList = {
   Register: { role: 'parent' | 'watcher' };
   ParentVerification: undefined;
   TrainingVideo: { title: string; description: string; videoUrl: string; moduleId: string };
+  RateWatcher: {
+    bookingId: string;
+    watcherName: string;
+    watcherId: string;
+  };
 };
 
 export type ParentTabParamList = {
