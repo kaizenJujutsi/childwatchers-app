@@ -49,7 +49,7 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
     if (tickRef.current) clearInterval(tickRef.current);
     animLoopRef.current?.stop();
     animLoopRef.current = null;
-  }, [pulseAnim]);
+  }, []);
 
   const resolve = useCallback((state: ScreenState, msg?: string) => {
     if (doneRef.current) return;
@@ -106,7 +106,7 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
           <Text style={styles.sub}>
             KES {totalKes.toLocaleString()} held in escrow.{'\n'}Your watcher has been notified.
           </Text>
-          <Text style={styles.ref}>Ref: {escrowRef}</Text>
+          {escrowRef ? <Text style={styles.ref}>Ref: {escrowRef}</Text> : null}
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: Colors.safe }]}
             onPress={() => navigation.navigate('ParentTabs')}
@@ -173,7 +173,7 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.screenBg} />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{watcherName}</Text>
-        <Text style={styles.headerSub}>KES {totalKes.toLocaleString()} · {escrowRef}</Text>
+        <Text style={styles.headerSub}>KES {totalKes.toLocaleString()}{escrowRef ? ` · ${escrowRef}` : ''}</Text>
       </View>
       <View style={styles.center}>
         <Animated.View style={[

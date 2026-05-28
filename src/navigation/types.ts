@@ -9,7 +9,7 @@ export type RootStackParamList = {
   AwaitingPayment: {
     bookingId: string;
     totalKes: number;
-    escrowRef: string;
+    escrowRef: string | null;
     watcherName: string;
   };
   Login: undefined;

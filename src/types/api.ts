@@ -40,6 +40,7 @@ export interface BookingPayload {
   date: string;
   start_time: string;
   hours: number;
+  offered_rate: number;
 }
 
 export interface BookingResponse {
@@ -48,7 +49,7 @@ export interface BookingResponse {
   watcher_id: string;
   parent_id: string;
   total_kes: number;
-  escrow_ref: string;
+  escrow_ref: string | null;
 }
 
 export interface ApiBooking {
