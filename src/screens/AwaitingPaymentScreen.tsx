@@ -37,15 +37,18 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
   const [msLeft, setMsLeft] = useState(TIMEOUT_MS);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const animLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startRef = useRef(Date.now());
   const doneRef = useRef(false);
+  const errorCountRef = useRef(0);
 
   const stopAll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (tickRef.current) clearInterval(tickRef.current);
-    pulseAnim.stopAnimation();
+    animLoopRef.current?.stop();
+    animLoopRef.current = null;
   }, [pulseAnim]);
 
   const resolve = useCallback((state: ScreenState, msg?: string) => {
@@ -57,12 +60,13 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
   }, [stopAll]);
 
   useEffect(() => {
-    Animated.loop(
+    animLoopRef.current = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.12, duration: 700, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1.0, duration: 700, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    animLoopRef.current.start();
 
     tickRef.current = setInterval(() => {
       const left = TIMEOUT_MS - (Date.now() - startRef.current);
@@ -73,13 +77,17 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
     pollRef.current = setInterval(async () => {
       try {
         const booking = await fetchBookingById(bookingId);
+        errorCountRef.current = 0;
         if (SUCCESS_STATUSES.has(booking.status)) {
           resolve('confirmed');
         } else if (booking.status === 'cancelled') {
           resolve('failed');
         }
       } catch {
-        // network error — keep polling
+        errorCountRef.current += 1;
+        if (errorCountRef.current >= 5) {
+          resolve('failed', 'Could not reach the server. Please check your connection.');
+        }
       }
     }, POLL_MS);
 
@@ -102,6 +110,8 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: Colors.safe }]}
             onPress={() => navigation.navigate('ParentTabs')}
+            accessibilityRole="button"
+            accessibilityLabel="View my bookings"
           >
             <Text style={styles.actionBtnText}>View My Bookings</Text>
           </TouchableOpacity>
@@ -123,6 +133,8 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: Colors.sos }]}
             onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back to booking screen"
           >
             <Text style={styles.actionBtnText}>Go Back</Text>
           </TouchableOpacity>
@@ -146,6 +158,8 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: Colors.accent }]}
             onPress={() => navigation.navigate('ParentTabs')}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss and go home"
           >
             <Text style={styles.actionBtnText}>Dismiss</Text>
           </TouchableOpacity>
@@ -172,7 +186,12 @@ export const AwaitingPaymentScreen: React.FC<Props> = ({ navigation, route }) =>
         <Text style={styles.sub}>Open your M-Pesa app and enter your PIN</Text>
         <Text style={styles.countdown}>{formatCountdown(msLeft)}</Text>
       </View>
-      <TouchableOpacity style={styles.cancelLink} onPress={() => navigation.goBack()}>
+      <TouchableOpacity
+        style={styles.cancelLink}
+        onPress={() => navigation.goBack()}
+        accessibilityRole="button"
+        accessibilityLabel="Cancel payment and go back"
+      >
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
     </SafeAreaView>
