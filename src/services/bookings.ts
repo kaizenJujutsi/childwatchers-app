@@ -8,3 +8,6 @@ export const fetchMyBookings = async (): Promise<ApiBooking[]> => {
     return [];
   }
 };
+
+export const fetchBookingById = async (id: string): Promise<ApiBooking> =>
+  apiGet<ApiBooking>(`/bookings/${id}`);
