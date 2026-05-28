@@ -15,6 +15,7 @@ import { FindWatchersScreen } from '../screens/FindWatchersScreen';
 import { SOSCenterScreen } from '../screens/SOSCenterScreen';
 import { WatcherProfileScreen } from '../screens/WatcherProfileScreen';
 import { BookPayScreen } from '../screens/BookPayScreen';
+import { AwaitingPaymentScreen } from '../screens/AwaitingPaymentScreen';
 import { WatcherHomeScreen } from '../screens/WatcherHomeScreen';
 import { WatcherVettingScreen } from '../screens/WatcherVettingScreen';
 import { WagesWalletScreen } from '../screens/WagesWalletScreen';
@@ -92,6 +93,7 @@ export function AppNavigator() {
         <Stack.Screen name="WatcherTabs" component={WatcherTabs} />
         <Stack.Screen name="WatcherProfile" component={WatcherProfileScreen} />
         <Stack.Screen name="BookPay" component={BookPayScreen} />
+        <Stack.Screen name="AwaitingPayment" component={AwaitingPaymentScreen} />
         <Stack.Screen name="ParentVerification" component={ParentVerificationScreen} />
         <Stack.Screen name="TrainingVideo" component={TrainingVideoScreen} />
       </Stack.Navigator>

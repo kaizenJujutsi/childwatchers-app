@@ -6,6 +6,12 @@ export type RootStackParamList = {
   WatcherTabs: undefined;
   WatcherProfile: { watcher: Watcher };
   BookPay: { watcher: Watcher };
+  AwaitingPayment: {
+    bookingId: string;
+    totalKes: number;
+    escrowRef: string;
+    watcherName: string;
+  };
   Login: undefined;
   Register: { role: 'parent' | 'watcher' };
   ParentVerification: undefined;
