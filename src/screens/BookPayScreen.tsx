@@ -98,11 +98,12 @@ export const BookPayScreen: React.FC<Props> = ({ navigation, route }) => {
                 hours,
                 offered_rate: effectiveRate,
               });
-              Alert.alert(
-                'M-Pesa Request Sent',
-                `Check your phone.\n\nRef: ${result.escrow_ref}`,
-                [{ text: 'OK', onPress: () => navigation.navigate('ParentTabs') }]
-              );
+              navigation.navigate('AwaitingPayment', {
+                bookingId: result.id,
+                totalKes: result.total_kes,
+                escrowRef: result.escrow_ref,
+                watcherName: watcher.name,
+              });
             } catch (e: any) {
               Alert.alert('Booking Failed', e?.message ?? 'Please try again.');
             } finally {
